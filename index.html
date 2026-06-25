@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <title>Gerador de Cards — Mito Seminovos</title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -64,6 +65,10 @@ textarea.leg-text:focus{border-color:#1a7a3c;background:#fff}
 .enviar-btn:hover{background:#145e2e}
 .enviar-btn:active{transform:scale(.98)}
 .enviar-ok{display:none;text-align:center;padding:12px;background:#e8f5e9;border:1px solid #a5d6a7;border-radius:10px;color:#1a7a3c;font-size:14px;font-weight:500;margin-top:10px}
+.drive-btn{width:100%;padding:14px;background:#1a73e8;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;margin-top:8px;transition:.15s;display:none}
+.drive-btn:hover{background:#1558b0}
+.drive-btn:active{transform:scale(.98)}
+.drive-status{display:none;text-align:center;padding:10px;font-size:13px;color:#777;margin-top:6px}
 </style>
 </head>
 <body>
@@ -150,7 +155,9 @@ textarea.leg-text:focus{border-color:#1a7a3c;background:#fff}
       </div>
       </div><!-- /campos-agendamento -->
       <button class="enviar-btn" id="enviar-btn" onclick="prepararEnvio()">Enviar para publicação</button>
-      <div class="enviar-ok" id="enviar-ok">Pacote gerado! Salve o arquivo JSON e as imagens na pasta <strong>fila</strong> do Google Drive compartilhado. O Cowork vai publicar nos horarios agendados.</div>
+      <button class="drive-btn" id="drive-btn" onclick="salvarNoDrive()">Salvar direto no Google Drive</button>
+      <div class="drive-status" id="drive-status"></div>
+      <div class="enviar-ok" id="enviar-ok">Pacote gerado e enviado para o Google Drive! O Cowork vai publicar nos horarios agendados.</div>
     </div>
   </div>
 
@@ -665,9 +672,111 @@ function prepararEnvio(){
   /* salvar também no localStorage */
   localStorage.setItem('mito_ultima_publicacao', JSON.stringify(dados));
 
-  /* mostrar instrução */
+  /* guardar dados e mostrar botão Drive */
+  dadosParaEnviar = dados;
   document.getElementById('enviar-btn').style.display = 'none';
-  document.getElementById('enviar-ok').style.display = 'block';
+  document.getElementById('drive-btn').style.display = 'block';
+}
+
+/* ============================================================
+   GOOGLE DRIVE UPLOAD
+   ============================================================ */
+var CLIENT_ID = '287003926894-b31rda1igharjv6813fa8gfh0dng043n.apps.googleusercontent.com';
+var FOLDER_ID = '1W2F4omubtulETb4bSx0_-fiw85v4xdlA';
+var SCOPES = 'https://www.googleapis.com/auth/drive.file';
+var gToken = null;
+var dadosParaEnviar = null;
+
+function getGoogleToken(callback){
+  if(gToken){ callback(gToken); return; }
+  var client = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID,
+    scope: SCOPES,
+    callback: function(resp){
+      if(resp.error){ alert('Erro ao autenticar com Google: '+resp.error); return; }
+      gToken = resp.access_token;
+      callback(gToken);
+    }
+  });
+  client.requestAccessToken();
+}
+
+function uploadFileToDrive(token, filename, blob, mimeType, callback){
+  var meta = {name: filename, parents: [FOLDER_ID]};
+  var form = new FormData();
+  form.append('metadata', new Blob([JSON.stringify(meta)], {type:'application/json'}));
+  form.append('file', blob);
+  fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+    method: 'POST',
+    headers: {'Authorization': 'Bearer '+token},
+    body: form
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(d){ callback(null, d); })
+  .catch(function(e){ callback(e); });
+}
+
+function setDriveStatus(msg, cor){
+  var el = document.getElementById('drive-status');
+  el.style.display = 'block';
+  el.style.color = cor || '#777';
+  el.textContent = msg;
+}
+
+function salvarNoDrive(){
+  if(!dadosParaEnviar){ alert('Gere o pacote primeiro clicando em Enviar para publicação.'); return; }
+  var cv = document.getElementById('cv');
+  if(!cv){ alert('Gere os cards primeiro.'); return; }
+
+  document.getElementById('drive-btn').disabled = true;
+  setDriveStatus('Conectando ao Google Drive...', '#1a73e8');
+
+  getGoogleToken(function(token){
+    setDriveStatus('Autenticado! Enviando arquivos...', '#1a73e8');
+
+    var slug = dadosParaEnviar.id;
+    var jsonBlob = new Blob([JSON.stringify(dadosParaEnviar, null, 2)], {type:'application/json'});
+    var uploaded = 0;
+    var total = 3;
+
+    function onUpload(err, nome){
+      if(err){
+        setDriveStatus('Erro ao enviar '+nome+': '+err.message, '#e53935');
+        document.getElementById('drive-btn').disabled = false;
+        return;
+      }
+      uploaded++;
+      setDriveStatus('Enviando... ('+uploaded+'/'+total+')', '#1a73e8');
+      if(uploaded === total){
+        document.getElementById('drive-btn').style.display = 'none';
+        document.getElementById('enviar-ok').style.display = 'block';
+        setDriveStatus('', '#777');
+      }
+    }
+
+    /* 1. JSON */
+    uploadFileToDrive(token, slug+'.json', jsonBlob, 'application/json', function(e,d){ onUpload(e,'JSON'); });
+
+    /* 2. Feed JPG — renderizar temporariamente */
+    render('feed');
+    setTimeout(function(){
+      var cvFeed = document.getElementById('cv');
+      cvFeed.toBlob(function(blob){
+        uploadFileToDrive(token, slug+'-feed.jpg', blob, 'image/jpeg', function(e,d){ onUpload(e,'Feed'); });
+      }, 'image/jpeg', 0.95);
+
+      /* 3. Stories JPG */
+      render('stories');
+      setTimeout(function(){
+        var cvStory = document.getElementById('cv');
+        cvStory.toBlob(function(blob){
+          uploadFileToDrive(token, slug+'-stories.jpg', blob, 'image/jpeg', function(e,d){ onUpload(e,'Stories'); });
+        }, 'image/jpeg', 0.95);
+        /* restaurar aba ativa */
+        render(abaAtiva);
+      }, 800);
+    }, 800);
+  });
 }
 </script>
 </body>
