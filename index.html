@@ -129,9 +129,14 @@ textarea.leg-text:focus{border-color:#1a7a3c;background:#fff}
     <div style="margin-top:16px;padding-top:14px;border-top:1px solid #e0e0e0">
       <div style="font-size:11px;font-weight:600;color:#777;letter-spacing:.08em;text-transform:uppercase;margin-bottom:10px">Agendar publicação</div>
       <div style="margin-bottom:10px;padding:10px 12px;background:#f0f0ee;border-radius:8px;font-size:12px;color:#777;line-height:1.5">
-        O agendamento minimo e de <strong style="color:#1a1a1a">1 hora a partir de agora</strong>. Feed e Stories serao publicados separadamente.
+        Defina a data e hora de publicacao. Feed e Stories serao publicados separadamente.
       </div>
 
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;padding:10px 12px;background:#fff3cd;border:1px solid #ffc107;border-radius:8px;">
+        <input type="checkbox" id="publicar-agora" onchange="toggleAgora(this.checked)" style="width:16px;height:16px;cursor:pointer;accent-color:#e53935">
+        <label for="publicar-agora" style="font-size:13px;font-weight:600;color:#856404;cursor:pointer">Publicar imediatamente (sem agendamento)</label>
+      </div>
+      <div id="campos-agendamento">
       <div style="font-size:12px;font-weight:600;color:#1a7a3c;margin-bottom:6px;letter-spacing:.04em">FEED — Instagram e Facebook</div>
       <div class="leg-hor">
         <div class="field"><label>Data</label><input type="date" id="f-data-feed" style="width:100%;padding:9px 11px;border:1px solid #ddd;border-radius:8px;font-size:14px;color:#1a1a1a;background:#fff;outline:none"></div>
@@ -143,6 +148,7 @@ textarea.leg-text:focus{border-color:#1a7a3c;background:#fff}
         <div class="field"><label>Data</label><input type="date" id="f-data-story" style="width:100%;padding:9px 11px;border:1px solid #ddd;border-radius:8px;font-size:14px;color:#1a1a1a;background:#fff;outline:none"></div>
         <div class="field"><label>Horário</label><input type="time" id="f-hora-story" style="width:100%;padding:9px 11px;border:1px solid #ddd;border-radius:8px;font-size:14px;color:#1a1a1a;background:#fff;outline:none"></div>
       </div>
+      </div><!-- /campos-agendamento -->
       <button class="enviar-btn" id="enviar-btn" onclick="prepararEnvio()">Enviar para publicação</button>
       <div class="enviar-ok" id="enviar-ok">Pacote gerado! Salve o arquivo JSON e as imagens na pasta <strong>fila</strong> do Google Drive compartilhado. O Cowork vai publicar nos horarios agendados.</div>
     </div>
@@ -487,6 +493,11 @@ function baixar(){
   a.click();
 }
 
+function toggleAgora(checked){
+  var campos = document.getElementById('campos-agendamento');
+  campos.style.display = checked ? 'none' : 'block';
+}
+
 /* ============================================================
    LEGENDA COM IA
    ============================================================ */
@@ -539,9 +550,9 @@ function gerarLegenda(formato){
     legendas[formato||'feed'] = txt;
     textarea.value = txt;
     document.getElementById('enviar-btn').style.display = 'block';
-    /* preencher horário mínimo: agora + 1h */
+    /* preencher horário padrão: agora + 10min */
     var agora = new Date();
-    agora.setHours(agora.getHours()+1);
+    agora.setMinutes(agora.getMinutes()+10);
     var dd = String(agora.getDate()).padStart(2,'0');
     var mm = String(agora.getMonth()+1).padStart(2,'0');
     var hh = String(agora.getHours()).padStart(2,'0');
@@ -591,21 +602,31 @@ function copiarLegenda(){
 }
 
 function prepararEnvio(){
-  var dataFeed  = document.getElementById('f-data-feed').value;
-  var horaFeed  = document.getElementById('f-hora-feed').value;
-  var dataStory = document.getElementById('f-data-story').value;
-  var horaStory = document.getElementById('f-hora-story').value;
+  var agora_pub = document.getElementById('publicar-agora').checked;
+  var agora_dt = new Date();
+  var fmt = function(d){
+    return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  };
+  var fmtH = function(d){
+    return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+  };
+  var dataFeed, horaFeed, dataStory, horaStory;
+  if(agora_pub){
+    dataFeed=fmt(agora_dt); horaFeed=fmtH(agora_dt);
+    var dt2=new Date(agora_dt.getTime()+5*60000);
+    dataStory=fmt(dt2); horaStory=fmtH(dt2);
+  } else {
+    dataFeed  = document.getElementById('f-data-feed').value;
+    horaFeed  = document.getElementById('f-hora-feed').value;
+    dataStory = document.getElementById('f-data-story').value;
+    horaStory = document.getElementById('f-hora-story').value;
+    if(!dataFeed||!horaFeed){alert('Preencha a data e horario do Feed.');return;}
+    if(!dataStory||!horaStory){alert('Preencha a data e horario do Stories.');return;}
+  }
 
-  if(!dataFeed||!horaFeed){alert('Preencha a data e horario do Feed.');return;}
-  if(!dataStory||!horaStory){alert('Preencha a data e horario do Stories.');return;}
-
-  /* validar mínimo 1h a partir de agora */
-  var agora = new Date();
-  var minimo = new Date(agora.getTime() + 60*60*1000);
+  /* sem restrição de horário para teste */
   var dtFeed  = new Date(dataFeed+'T'+horaFeed);
   var dtStory = new Date(dataStory+'T'+horaStory);
-  if(dtFeed < minimo){alert('O horario do Feed deve ser pelo menos 1 hora a partir de agora.');return;}
-  if(dtStory < minimo){alert('O horario do Stories deve ser pelo menos 1 hora a partir de agora.');return;}
 
   /* montar pacote completo para o Cowork */
   var slug = (v('f-marca')+'-'+v('f-modelo')+'-'+v('f-ano'))
