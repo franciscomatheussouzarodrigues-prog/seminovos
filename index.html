@@ -273,7 +273,7 @@ function drawHeader(ctx,W,hH){
   ctx.fillStyle=C.mgray; ctx.textAlign='left';
   ctx.fillText('MITO . SEMINOVOS',W*0.035,hH/2);
   ctx.fillStyle=C.dark; ctx.textAlign='center';
-  ctx.fillText('checkmark  VEICULO CHECADO E APROVADO',W*0.5,hH/2);
+  ctx.fillText('\u2713  VEICULO CHECADO E APROVADO',W*0.5,hH/2);
   ctx.fillStyle=C.mgray; ctx.textAlign='right';
   ctx.fillText('CERTIFICADO',W*0.965,hH/2);
   ctx.restore();
@@ -283,25 +283,41 @@ function drawHeader(ctx,W,hH){
 function drawPreco(ctx, preco, rightX, lblY, valY, W, isStories){
   var numFs = isStories ? Math.round(W*0.055) : Math.round(W*0.058);
   var rsFs  = isStories ? Math.round(W*0.026) : Math.round(W*0.028);
-  var rsGap = Math.round(W*0.008);
+  var rsGap = Math.round(W*0.006);
   ctx.save();
   ctx.textBaseline='alphabetic'; ctx.textAlign='right';
   /* POR */
-  ctx.font='400 '+Math.round(W*0.018)+'px -apple-system,sans-serif';
+  ctx.font='400 '+Math.round(W*0.018)+'px Arial,sans-serif';
   ctx.fillStyle=C.mgray; ctx.fillText('POR',rightX,lblY);
   /* remover R$ caso o usuário tenha digitado junto */
   var pStr=preco.trim();
   if(pStr.toUpperCase().startsWith('R$')) pStr=pStr.slice(2).trim();
   var pNum = pStr || 'Consulte';
-  var pRs  = (pNum !== 'Consulte') ? 'R$' : '';
-  /* número grande */
-  ctx.font='700 '+numFs+'px -apple-system,sans-serif';
-  ctx.fillStyle=C.dark; ctx.fillText(pNum,rightX,valY);
-  /* R$ menor à esquerda do número */
-  if(pRs){
-    var nW=ctx.measureText(pNum).width;
-    ctx.font='500 '+rsFs+'px -apple-system,sans-serif';
-    ctx.fillStyle=C.dark; ctx.fillText(pRs,rightX-nW-rsGap,valY);
+  var mostrarRs = (pNum !== 'Consulte');
+  /* número grande — setar fonte ANTES de medir */
+  ctx.font='700 '+numFs+'px Arial,sans-serif';
+  ctx.fillStyle=C.dark;
+  if(mostrarRs){
+    /* medir número com a fonte correta já setada */
+    var nW = ctx.measureText(pNum).width;
+    /* R$ menor — calcular posição */
+    ctx.font='500 '+rsFs+'px Arial,sans-serif';
+    var rsW = ctx.measureText('R$').width;
+    var totalW = rsW + rsGap + nW;
+    var startX = rightX - totalW;
+    /* desenhar R$ */
+    ctx.fillStyle=C.dark;
+    ctx.textAlign='left';
+    ctx.fillText('R$', startX, valY);
+    /* desenhar número */
+    ctx.font='700 '+numFs+'px Arial,sans-serif';
+    ctx.textAlign='left';
+    ctx.fillText(pNum, startX + rsW + rsGap, valY);
+  } else {
+    ctx.font='700 '+numFs+'px Arial,sans-serif';
+    ctx.textAlign='right';
+    ctx.fillStyle=C.dark;
+    ctx.fillText(pNum, rightX, valY);
   }
   ctx.restore();
 }
@@ -539,8 +555,10 @@ function gerarLegenda(formato){
   linhas.push('📍 ' + (km ? km + ' km' : '—') + ' | ' + cambio + ' | ' + comb);
   linhas.push('');
   if(preco){
-    linhas.push('💰 ' + preco);
-    if(condicao) linhas.push(condicao);
+    linhas.push('💰 R$ ' + preco);
+  }
+  if(condicao){
+    linhas.push(condicao);
   }
   linhas.push('');
   linhas.push('✅ Veículo Checado e Aprovado');
