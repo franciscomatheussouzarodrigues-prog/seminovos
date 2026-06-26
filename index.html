@@ -112,15 +112,17 @@ textarea.leg-text:focus{border-color:#1a7a3c;background:#fff}
       <div class="field"><label>Combustível</label>
         <select id="f-comb"><option>Flex</option><option>Gasolina</option><option>Diesel</option><option>Elétrico</option><option>Híbrido</option></select>
       </div>
-      <div class="field"><label>Preço</label><input type="text" id="f-preco" placeholder="R$ 289.900,00"></div>
+      <div class="field"><label>Preço (R$)</label><div style="display:flex;align-items:center;border:1px solid #ddd;border-radius:8px;overflow:hidden;background:#fff" id="preco-wrap"><span style="padding:9px 10px 9px 11px;font-size:14px;font-weight:600;color:#888;background:#f5f5f5;border-right:1px solid #ddd;flex-shrink:0">R$</span><input type="text" id="f-preco" placeholder="289.900,00" style="border:none;border-radius:0;flex:1;padding:9px 11px;font-size:14px;color:#1a1a1a;background:#fff;outline:none"></div></div>
     </div>
+  </div>
+    <div class="field" style="margin-top:10px"><label>Condição comercial <span style="font-weight:400;text-transform:none;font-size:10px;color:#aaa">(opcional — ex: Entrada de R$ 20.000 + parcelas a partir de R$ 1.890/mês)</span></label><input type="text" id="f-condicao" placeholder="Deixe em branco para omitir"></div>
   </div>
   <button class="gen-btn" onclick="gerar()">✦ Gerar cards</button>
   
   <!-- SEÇÃO LEGENDA -->
   <div class="leg-section" id="leg-section">
     <div class="leg-header">
-      <div class="leg-title">Legenda gerada por IA — Feed Instagram e Facebook</div>
+      <div class="leg-title">Legenda — Feed Instagram e Facebook</div>
       <button class="leg-regen" onclick="gerarLegenda('feed')" style="padding:5px 12px;border-radius:6px;border:1px solid #ddd;font-size:12px;font-weight:500;cursor:pointer;background:#fff;color:#777">Gerar novamente</button>
     </div>
     <div class="leg-loading" id="leg-loading">Gerando legenda com IA...</div>
@@ -154,10 +156,6 @@ textarea.leg-text:focus{border-color:#1a7a3c;background:#fff}
         <div class="field"><label>Horário</label><input type="time" id="f-hora-story" style="width:100%;padding:9px 11px;border:1px solid #ddd;border-radius:8px;font-size:14px;color:#1a1a1a;background:#fff;outline:none"></div>
       </div>
       </div><!-- /campos-agendamento -->
-      <button class="enviar-btn" id="enviar-btn" onclick="prepararEnvio()">Enviar para publicação</button>
-      <button class="drive-btn" id="drive-btn" onclick="salvarNoDrive()">Salvar direto no Google Drive</button>
-      <div class="drive-status" id="drive-status"></div>
-      <div class="enviar-ok" id="enviar-ok">Pacote gerado e enviado para o Google Drive! O Cowork vai publicar nos horarios agendados.</div>
     </div>
   </div>
 
@@ -172,6 +170,9 @@ textarea.leg-text:focus{border-color:#1a7a3c;background:#fff}
       <div class="cvwrap"><canvas id="cv"></canvas></div>
       <div class="diminfo" id="diminfo"></div>
       <button class="dl-btn" onclick="baixar()">⬇ Baixar card</button>
+      <button class="enviar-btn" id="drive-card-btn" onclick="enviarParaDrive()" style="display:none;margin-top:8px;background:#1a73e8">☁ Salvar no Google Drive</button>
+      <div class="drive-status" id="drive-status-card" style="display:none;text-align:center;padding:10px;font-size:13px;color:#777;margin-top:6px"></div>
+      <div class="enviar-ok" id="enviar-ok-card" style="display:none;text-align:center;padding:12px;background:#e8f5e9;border:1px solid #a5d6a7;border-radius:10px;color:#1a7a3c;font-size:14px;font-weight:500;margin-top:10px">✅ Arquivos enviados para o Google Drive!</div>
     </div>
   </div>
 </div>
@@ -217,6 +218,7 @@ var SCALE={feed:.36,stories:.20,webmotors:.36};
 function gerar(){
   if(!imgs.main){alert('Selecione a foto principal do carro.');return;}
   document.getElementById('out').style.display='block';
+  document.getElementById('drive-card-btn').style.display='block';
   render(abaAtiva);
   setTimeout(function(){document.getElementById('out').scrollIntoView({behavior:'smooth',block:'start'});},80);
   /* gerar legenda automaticamente — sempre feed */
@@ -287,11 +289,11 @@ function drawPreco(ctx, preco, rightX, lblY, valY, W, isStories){
   /* POR */
   ctx.font='400 '+Math.round(W*0.018)+'px -apple-system,sans-serif';
   ctx.fillStyle=C.mgray; ctx.fillText('POR',rightX,lblY);
-  /* separar R$ do número */
-  var pStr=preco.trim(), pRs='', pNum=pStr;
-  if(pStr.charAt(0)==='R' && pStr.charAt(1)==='$'){
-    pRs='R$'; pNum=pStr.slice(2).trim();
-  }
+  /* remover R$ caso o usuário tenha digitado junto */
+  var pStr=preco.trim();
+  if(pStr.toUpperCase().startsWith('R$')) pStr=pStr.slice(2).trim();
+  var pNum = pStr || 'Consulte';
+  var pRs  = (pNum !== 'Consulte') ? 'R$' : '';
   /* número grande */
   ctx.font='700 '+numFs+'px -apple-system,sans-serif';
   ctx.fillStyle=C.dark; ctx.fillText(pNum,rightX,valY);
@@ -519,12 +521,7 @@ function gerarLegenda(formato){
   var cambio  = document.getElementById('f-cambio').value;
   var comb    = document.getElementById('f-comb').value;
   var preco   = v('f-preco')  || '';
-
-  var prompts = {
-    feed: 'Crie uma legenda para Instagram de um seminovo à venda. Tom: direto, confiante, comercial. Máximo 5 linhas + hashtags. Dados do veículo: Marca: '+marca+', Modelo: '+modelo+', Ano: '+ano+', KM: '+km+', Câmbio: '+cambio+', Combustível: '+comb+', Preço: '+preco+'. Inclua call to action para entrar em contato. Finalize com 5 hashtags relevantes. Apenas o texto, sem introdução.',
-    stories: 'Crie uma legenda curta para Stories do Instagram de um seminovo à venda. Tom: dinâmico, direto. Máximo 3 linhas curtas + 3 hashtags. Dados: Modelo: '+modelo+' '+ano+', KM: '+km+', Preço: '+preco+'. Apenas o texto, sem introdução.',
-    webmotors: 'Crie uma descrição de anúncio para Webmotors/OLX de um seminovo. Tom: informativo e profissional. Máximo 6 linhas. Dados: Marca: '+marca+', Modelo: '+modelo+', Ano: '+ano+', KM: '+km+', Câmbio: '+cambio+', Combustível: '+comb+', Preço: '+preco+'. Destaque os pontos fortes. Apenas o texto, sem introdução.'
-  };
+  var condicao = v('f-condicao') || '';
 
   var leg = document.getElementById('leg-section');
   var loading = document.getElementById('leg-loading');
@@ -535,28 +532,29 @@ function gerarLegenda(formato){
   textarea.style.display = 'none';
   textarea.value = '';
 
-  fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 1000,
-      messages: [{role:'user', content: prompts[formato||'feed']}]
-    })
-  })
-  .then(function(r){ return r.json(); })
-  .then(function(d){
+  /* Gera legenda localmente a partir dos dados do formulário */
+  var linhas = [];
+  linhas.push('🚗 ' + marca + ' ' + modelo + (ano ? ' ' + ano : ''));
+  linhas.push('');
+  linhas.push('📍 ' + (km ? km + ' km' : '—') + ' | ' + cambio + ' | ' + comb);
+  linhas.push('');
+  if(preco){
+    linhas.push('💰 ' + preco);
+    if(condicao) linhas.push(condicao);
+  }
+  linhas.push('');
+  linhas.push('✅ Veículo Checado e Aprovado');
+  linhas.push('');
+  linhas.push('Fale agora mesmo com nossa equipe pelo link na Bio!');
+
+  var txt = linhas.join('\n');
+
+  /* Pequeno delay para dar feedback visual de "geração" */
+  setTimeout(function(){
     loading.style.display = 'none';
     textarea.style.display = 'block';
-    var txt = '';
-    if(d.content && d.content[0] && d.content[0].text){
-      txt = d.content[0].text;
-    } else {
-      txt = 'Erro ao gerar legenda. Tente novamente.';
-    }
     legendas[formato||'feed'] = txt;
     textarea.value = txt;
-    document.getElementById('enviar-btn').style.display = 'block';
     /* preencher horário padrão: agora + 10min */
     var agora = new Date();
     agora.setMinutes(agora.getMinutes()+10);
@@ -579,12 +577,7 @@ function gerarLegenda(formato){
     document.getElementById('f-data-story').value = agora.getFullYear()+'-'+mm2+'-'+dd2;
     document.getElementById('f-data-story').min   = dataMin;
     document.getElementById('f-hora-story').value = hh2+':'+mi2;
-  })
-  .catch(function(){
-    loading.style.display = 'none';
-    textarea.style.display = 'block';
-    textarea.value = 'Erro de conexão. Verifique sua internet e tente novamente.';
-  });
+  }, 300);
 }
 
 function trocarLegenda(formato, btn){
@@ -608,7 +601,7 @@ function copiarLegenda(){
   setTimeout(function(){ btn.textContent = 'Copiar legenda'; }, 2000);
 }
 
-function prepararEnvio(){
+function enviarParaDrive(){
   var agora_pub = document.getElementById('publicar-agora').checked;
   var agora_dt = new Date();
   var fmt = function(d){
@@ -631,11 +624,6 @@ function prepararEnvio(){
     if(!dataStory||!horaStory){alert('Preencha a data e horario do Stories.');return;}
   }
 
-  /* sem restrição de horário para teste */
-  var dtFeed  = new Date(dataFeed+'T'+horaFeed);
-  var dtStory = new Date(dataStory+'T'+horaStory);
-
-  /* montar pacote completo para o Cowork */
   var slug = (v('f-marca')+'-'+v('f-modelo')+'-'+v('f-ano'))
     .toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9\-]/g,'');
   var dados = {
@@ -646,37 +634,66 @@ function prepararEnvio(){
     km:        v('f-km'),
     cambio:    document.getElementById('f-cambio').value,
     comb:      document.getElementById('f-comb').value,
-    preco:     v('f-preco'),
+    preco:     'R$ '+v('f-preco'),
     legenda:   document.getElementById('leg-text').value,
-    feed: {
-      data:    dataFeed,
-      hora:    horaFeed,
-      arquivo: slug+'-feed.jpg'
-    },
-    story: {
-      data:    dataStory,
-      hora:    horaStory,
-      arquivo: slug+'-stories.jpg'
-    },
+    feed: { data: dataFeed, hora: horaFeed, arquivo: slug+'-feed.jpg' },
+    story:{ data: dataStory, hora: horaStory, arquivo: slug+'-stories.jpg' },
     status:    'aguardando',
     criado_em: new Date().toISOString()
   };
 
-  /* salvar JSON para download */
-  var blob = new Blob([JSON.stringify(dados, null, 2)], {type:'application/json'});
-  var a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = dados.id+'.json';
-  a.click();
+  var cv = document.getElementById('cv');
+  if(!cv){ alert('Gere os cards primeiro.'); return; }
 
-  /* salvar também no localStorage */
-  localStorage.setItem('mito_ultima_publicacao', JSON.stringify(dados));
+  document.getElementById('drive-card-btn').disabled = true;
+  setDriveStatus('Conectando ao Google Drive...', '#1a73e8');
 
-  /* guardar dados e mostrar botão Drive */
-  dadosParaEnviar = dados;
-  document.getElementById('enviar-btn').style.display = 'none';
-  document.getElementById('drive-btn').style.display = 'block';
+  getGoogleToken(function(token){
+    setDriveStatus('Autenticado! Enviando arquivos...', '#1a73e8');
+
+    var jsonBlob = new Blob([JSON.stringify(dados, null, 2)], {type:'application/json'});
+    var uploaded = 0;
+    var total = 3;
+
+    function onUpload(err, nome){
+      if(err){
+        setDriveStatus('Erro ao enviar '+nome+': '+err.message, '#e53935');
+        document.getElementById('drive-card-btn').disabled = false;
+        return;
+      }
+      uploaded++;
+      setDriveStatus('Enviando... ('+uploaded+'/'+total+')', '#1a73e8');
+      if(uploaded === total){
+        document.getElementById('drive-card-btn').style.display = 'none';
+        document.getElementById('enviar-ok-card').style.display = 'block';
+        setDriveStatus('', '#777');
+      }
+    }
+
+    /* 1. JSON */
+    uploadFileToDrive(token, dados.id+'.json', jsonBlob, 'application/json', function(e,d){ onUpload(e,'JSON'); });
+
+    /* 2. Feed JPG */
+    render('feed');
+    setTimeout(function(){
+      var cvFeed = document.getElementById('cv');
+      cvFeed.toBlob(function(blob){
+        uploadFileToDrive(token, slug+'-feed.jpg', blob, 'image/jpeg', function(e,d){ onUpload(e,'Feed'); });
+      }, 'image/jpeg', 0.95);
+
+      /* 3. Stories JPG */
+      render('stories');
+      setTimeout(function(){
+        var cvStory = document.getElementById('cv');
+        cvStory.toBlob(function(blob){
+          uploadFileToDrive(token, slug+'-stories.jpg', blob, 'image/jpeg', function(e,d){ onUpload(e,'Stories'); });
+        }, 'image/jpeg', 0.95);
+        render(abaAtiva);
+      }, 800);
+    }, 800);
+  });
 }
+var dadosParaEnviar = null;
 
 /* ============================================================
    GOOGLE DRIVE UPLOAD
@@ -685,7 +702,6 @@ var CLIENT_ID = '287003926894-b31rda1igharjv6813fa8gfh0dng043n.apps.googleuserco
 var FOLDER_ID = '1W2F4omubtulETb4bSx0_-fiw85v4xdlA';
 var SCOPES = 'https://www.googleapis.com/auth/drive.file';
 var gToken = null;
-var dadosParaEnviar = null;
 
 function getGoogleToken(callback){
   if(gToken){ callback(gToken); return; }
@@ -717,67 +733,12 @@ function uploadFileToDrive(token, filename, blob, mimeType, callback){
 }
 
 function setDriveStatus(msg, cor){
-  var el = document.getElementById('drive-status');
-  el.style.display = 'block';
+  var el = document.getElementById('drive-status-card');
+  el.style.display = msg ? 'block' : 'none';
   el.style.color = cor || '#777';
   el.textContent = msg;
 }
 
-function salvarNoDrive(){
-  if(!dadosParaEnviar){ alert('Gere o pacote primeiro clicando em Enviar para publicação.'); return; }
-  var cv = document.getElementById('cv');
-  if(!cv){ alert('Gere os cards primeiro.'); return; }
-
-  document.getElementById('drive-btn').disabled = true;
-  setDriveStatus('Conectando ao Google Drive...', '#1a73e8');
-
-  getGoogleToken(function(token){
-    setDriveStatus('Autenticado! Enviando arquivos...', '#1a73e8');
-
-    var slug = dadosParaEnviar.id;
-    var jsonBlob = new Blob([JSON.stringify(dadosParaEnviar, null, 2)], {type:'application/json'});
-    var uploaded = 0;
-    var total = 3;
-
-    function onUpload(err, nome){
-      if(err){
-        setDriveStatus('Erro ao enviar '+nome+': '+err.message, '#e53935');
-        document.getElementById('drive-btn').disabled = false;
-        return;
-      }
-      uploaded++;
-      setDriveStatus('Enviando... ('+uploaded+'/'+total+')', '#1a73e8');
-      if(uploaded === total){
-        document.getElementById('drive-btn').style.display = 'none';
-        document.getElementById('enviar-ok').style.display = 'block';
-        setDriveStatus('', '#777');
-      }
-    }
-
-    /* 1. JSON */
-    uploadFileToDrive(token, slug+'.json', jsonBlob, 'application/json', function(e,d){ onUpload(e,'JSON'); });
-
-    /* 2. Feed JPG — renderizar temporariamente */
-    render('feed');
-    setTimeout(function(){
-      var cvFeed = document.getElementById('cv');
-      cvFeed.toBlob(function(blob){
-        uploadFileToDrive(token, slug+'-feed.jpg', blob, 'image/jpeg', function(e,d){ onUpload(e,'Feed'); });
-      }, 'image/jpeg', 0.95);
-
-      /* 3. Stories JPG */
-      render('stories');
-      setTimeout(function(){
-        var cvStory = document.getElementById('cv');
-        cvStory.toBlob(function(blob){
-          uploadFileToDrive(token, slug+'-stories.jpg', blob, 'image/jpeg', function(e,d){ onUpload(e,'Stories'); });
-        }, 'image/jpeg', 0.95);
-        /* restaurar aba ativa */
-        render(abaAtiva);
-      }, 800);
-    }, 800);
-  });
-}
 </script>
 </body>
 </html>
